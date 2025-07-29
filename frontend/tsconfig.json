@@ -23,8 +23,8 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "downlevelIteration": true,
-    "types": [],
-    "typeRoots": []
+    "types": ["node"],
+    "typeRoots": ["node_modules/@types"]
   },
   "include": [
     "src/**/*"

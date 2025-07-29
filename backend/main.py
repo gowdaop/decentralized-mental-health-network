@@ -1,13 +1,15 @@
+# main.py
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.api.v1 import auth, sessions, mood
-from app.database.connection import create_tables
-import uvicorn
 
-# Create tables on startup
-create_tables()
+# import from our new database package
+from app.database import create_tables
+
+import uvicorn
 
 app = FastAPI(
     title=settings.PROJECT_NAME + " - AI Enhanced",
@@ -16,7 +18,7 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
 )
 
-# CORS middleware
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -25,10 +27,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers
+# routers
 app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["Authentication & Blockchain"])
 app.include_router(sessions.router, prefix=f"{settings.API_V1_STR}/sessions", tags=["Peer Sessions & AI Matching"])
 app.include_router(mood.router, prefix=f"{settings.API_V1_STR}/mood", tags=["Mood Tracking & AI Analysis"])
+
+# create tables on startup
+@app.on_event("startup")
+def on_startup():
+    create_tables()
 
 @app.get("/")
 async def root():

@@ -1,49 +1,88 @@
-# backend/app/services/auth.py
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+from fastapi import HTTPException, status, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.core.config import settings
-from app.crypto.identity import AnonymousIdentity
+import hashlib
+import secrets
+
+# Security scheme for JWT
+security = HTTPBearer()
 
 class AuthService:
     def __init__(self):
-        self.pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-        self.identity_manager = AnonymousIdentity()
-    
-    def create_access_token(self, data: dict, expires_delta: timedelta = None):
-        to_encode = data.copy()
-        if expires_delta:
-            expire = datetime.utcnow() + expires_delta
-        else:
-            expire = datetime.utcnow() + timedelta(minutes=15)
-        to_encode.update({"exp": expire})
-        encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
-        return encoded_jwt
-    
-    def verify_token(self, token: str):
-        try:
-            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-            commitment: str = payload.get("sub")
-            if commitment is None:
-                return None
-            return commitment
-        except JWTError:
-            return None
-    
-    def register_anonymous_user(self, preferences: dict) -> dict:
-        """Register user with anonymous commitment"""
-        user_data = f"{preferences.get('age_range', '')}:{preferences.get('topics', '')}"
-        commitment, randomness = self.identity_manager.create_commitment(user_data)
+        self.secret_key = getattr(settings, 'SECRET_KEY', 'your-secret-key-here-change-this-in-production')
+        self.algorithm = "HS256"
+        self.access_token_expire_minutes = 30
+
+    def register_anonymous_user(self, user_data: dict):
+        """Register anonymous user and return commitment + token"""
+        # Generate anonymous commitment
+        random_data = secrets.token_hex(32)
+        commitment_data = f"{user_data}_{random_data}_{datetime.utcnow()}"
+        commitment = hashlib.sha256(commitment_data.encode()).hexdigest()
         
         # Create access token
-        access_token = self.create_access_token(
-            data={"sub": commitment}, 
-            expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-        )
+        access_token = self.create_access_token({"commitment": commitment})
         
         return {
             "commitment": commitment,
-            "randomness": randomness,
-            "access_token": access_token,
-            "token_type": "bearer"
+            "access_token": access_token
         }
+    
+    def create_access_token(self, data: dict):
+        """Create JWT access token"""
+        to_encode = data.copy()
+        expire = datetime.utcnow() + timedelta(minutes=self.access_token_expire_minutes)
+        to_encode.update({"exp": expire})
+        
+        encoded_jwt = jwt.encode(to_encode, self.secret_key, algorithm=self.algorithm)
+        return encoded_jwt
+    
+    def verify_token(self, credentials: HTTPAuthorizationCredentials = Depends(security)):
+        """Verify JWT token from Authorization header"""
+        try:
+            token = credentials.credentials
+            payload = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
+            commitment: str = payload.get("commitment")
+            if commitment is None:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid authentication credentials",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            return commitment
+        except JWTError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication credentials",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    
+    def get_current_user(self, credentials: HTTPAuthorizationCredentials = Depends(security)):
+        """Get current user from token - returns user dict"""
+        try:
+            token = credentials.credentials
+            payload = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
+            commitment: str = payload.get("commitment")
+            if commitment is None:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid authentication credentials",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            return {"commitment": commitment}
+        except JWTError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication credentials",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+    def decode_token(self, token: str):
+        """Decode token without dependency (for internal use)"""
+        try:
+            payload = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
+            return payload.get("commitment")
+        except JWTError:
+            return None
