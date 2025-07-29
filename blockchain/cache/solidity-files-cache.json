@@ -1,0 +1,77 @@
+{
+  "_format": "hh-sol-cache-2",
+  "files": {
+    "C:\\Users\\vigne\\Desktop\\main project 1\\decentralized-mental-health-network\\blockchain\\contracts\\TokenSystem.sol": {
+      "lastModificationDate": 1752952468812,
+      "contentHash": "e66d790c6421ea82f10936dbfc7d93e1",
+      "sourceName": "contracts/TokenSystem.sol",
+      "solcConfig": {
+        "version": "0.8.28",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "TokenSystem"
+      ]
+    },
+    "C:\\Users\\vigne\\Desktop\\main project 1\\decentralized-mental-health-network\\blockchain\\contracts\\UserRegistry.sol": {
+      "lastModificationDate": 1752952462519,
+      "contentHash": "6f55d331cee6ac993387f02e93e83088",
+      "sourceName": "contracts/UserRegistry.sol",
+      "solcConfig": {
+        "version": "0.8.28",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "UserRegistry"
+      ]
+    }
+  }
+}
