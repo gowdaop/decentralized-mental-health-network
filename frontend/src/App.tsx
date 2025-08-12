@@ -1,16 +1,26 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './hooks/useAuth';
 import Layout from './components/layout/Layout';
-import Dashboard from './components/dashboard/Dashboard';
 import Registration from './components/auth/Registration';
 import Login from './components/auth/Login';
-import MoodTracker from './components/dashboard/MoodTracker';
-import PeerMatching from './components/peers/PeerMatching';
-import PersonalInsights from './components/analytics/PersonalInsights';
-import CommunityTrends from './components/analytics/CommunityTrends';
+import Dashboard from './components/dashboard/Dashboard';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import './styles/globals.css';
+import './styles/themes.css';
+import './styles/components.css';
+// ✅ Create a dedicated MoodPage component
+const MoodPage: React.FC = () => {
+  return (
+    <div className="max-w-4xl mx-auto">
+      <h1 className="text-3xl font-bold text-gray-900 mb-8">Mood Tracking</h1>
+      <div className="bg-white rounded-xl shadow-lg p-8">
+        {/* Your existing MoodTracker component */}
+        <div>Mood Tracker will go here</div>
+      </div>
+    </div>
+  );
+};
 
 function App() {
   return (
@@ -27,61 +37,26 @@ function App() {
             <Route path="/register" element={<Registration />} />
             <Route path="/login" element={<Login />} />
             
-            {/* Protected Routes */}
+            {/* Protected Routes with Layout - ✅ Remove children prop */}
             <Route 
               path="/" 
               element={
                 <ProtectedRoute>
-                  <Layout>
-                    <Dashboard />
-                  </Layout>
+                  <Layout />
                 </ProtectedRoute>
-              } 
-            />
+              }
+            >
+              {/* ✅ Nested routes using index and path */}
+              <Route index element={<Dashboard />} />
+              <Route path="dashboard" element={<Dashboard />} />
+              <Route path="mood" element={<MoodPage />} />
+              <Route path="analytics" element={<div>Analytics Coming Soon</div>} />
+              <Route path="peers" element={<div>Peer Support Coming Soon</div>} />
+              <Route path="community" element={<div>Community Coming Soon</div>} />
+            </Route>
             
-            <Route 
-              path="/mood" 
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <MoodTracker />
-                  </Layout>
-                </ProtectedRoute>
-              } 
-            />
-            
-            <Route 
-              path="/peers" 
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <PeerMatching />
-                  </Layout>
-                </ProtectedRoute>
-              } 
-            />
-            
-            <Route 
-              path="/insights" 
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <PersonalInsights />
-                  </Layout>
-                </ProtectedRoute>
-              } 
-            />
-            
-            <Route 
-              path="/community" 
-              element={
-                <ProtectedRoute>
-                  <Layout>
-                    <CommunityTrends />
-                  </Layout>
-                </ProtectedRoute>
-              } 
-            />
+            {/* Catch all route */}
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
       </Router>

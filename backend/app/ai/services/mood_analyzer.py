@@ -4,8 +4,9 @@ from typing import Dict, List, Optional, Tuple
 from sqlalchemy.orm import Session
 from app.models.user import MoodEntry
 from app.crypto.identity import AnonymousIdentity
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta  # ✅ Added timedelta
 import logging
+
 
 class MoodAnalyzer:
     def __init__(self):

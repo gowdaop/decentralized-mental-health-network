@@ -25,7 +25,11 @@ class ApiService {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
-    const url = `${this.baseURL}${endpoint}`;
+    // ✅ FIXED: Remove duplicate /api/v1 prefix if present in endpoint
+    const cleanEndpoint = endpoint.replace(/^\/api\/v1/, '');
+    const url = `${this.baseURL}${cleanEndpoint.startsWith('/') ? cleanEndpoint : `/${cleanEndpoint}`}`;
+    
+    console.log('API Request URL:', url); // Debug log to verify correct URLs
     
     // Default headers - Fixed TypeScript issue
     const headers: Record<string, string> = {

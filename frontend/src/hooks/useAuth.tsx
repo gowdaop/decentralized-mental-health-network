@@ -1,8 +1,6 @@
 import React, { useState, useEffect, createContext, useContext, useCallback } from 'react';
-import { User, AuthContextType } from '../types/auth.types';
-// Ensure the correct path and file exist for authService
+import { User, AuthContextType, RegisterRequest } from '../types/auth.types';
 import { authService } from '../services/auth';
- // Update path if necessary, e.g. './services/auth' or create the file if missing
 import { SUCCESS_MESSAGES, ERROR_MESSAGES } from '../utils/constants';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -55,19 +53,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     initializeAuth();
   }, []);
 
-  // Register function
-  const register = useCallback(async (ageRange: string) => {
+  // ✅ Updated register function to match AuthContextType interface
+  const register = useCallback(async (userData: RegisterRequest): Promise<{ success: boolean; commitment?: string; error?: string }> => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const result = await authService.register(ageRange);
+      console.log('useAuth register called with:', userData);
+      
+      const result = await authService.register(userData);
       
       if (result.success && result.commitment) {
-        // Get updated user data
-        const userData = authService.getStoredUser();
-        if (userData) {
-          setUser(userData);
+        // Get updated user data from auth service
+        const storedUserData = authService.getStoredUser();
+        if (storedUserData) {
+          setUser(storedUserData);
         }
         
         setIsLoading(false);
@@ -85,28 +85,30 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, []);
 
-  // Login function
-  const login = useCallback(async (commitment: string): Promise<boolean> => {
+  // ✅ Updated login function to match AuthContextType interface
+  const login = useCallback(async (commitment: string, randomness: string): Promise<{ success: boolean; user?: User; error?: string }> => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const result = await authService.login(commitment);
+      console.log('useAuth login called with:', { commitment, randomness });
+      
+      const result = await authService.login(commitment, randomness);
       
       if (result.success && result.user) {
         setUser({ ...result.user, isAuthenticated: true });
         setIsLoading(false);
-        return true;
+        return { success: true, user: result.user };
       } else {
         setError(result.error || ERROR_MESSAGES.LOGIN_FAILED);
         setIsLoading(false);
-        return false;
+        return { success: false, error: result.error };
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : ERROR_MESSAGES.LOGIN_FAILED;
       setError(errorMessage);
       setIsLoading(false);
-      return false;
+      return { success: false, error: errorMessage };
     }
   }, []);
 
@@ -122,15 +124,39 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setError(null);
   }, []);
 
+  // ✅ Added missing methods from AuthContextType interface
+  const getCurrentCommitment = useCallback((): string | null => {
+    return authService.getCurrentCommitment();
+  }, []);
+
+  const getUserProfile = useCallback(async (): Promise<{ success: boolean; user?: User; error?: string }> => {
+    try {
+      const result = await authService.getUserProfile();
+      
+      if (result.success && result.user) {
+        setUser({ ...result.user, isAuthenticated: true });
+        return { success: true, user: result.user };
+      } else {
+        return { success: false, error: result.error };
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : ERROR_MESSAGES.UNKNOWN_ERROR;
+      return { success: false, error: errorMessage };
+    }
+  }, []);
+
+  // ✅ Complete AuthContextType implementation
   const value: AuthContextType = {
     user,
     isAuthenticated,
     isLoading,
     error,
-    login,
-    register,
+    login,                    // Now matches: (commitment: string, randomness: string) => Promise<{success: boolean; user?: User; error?: string}>
+    register,                 // Now matches: (userData: RegisterRequest) => Promise<{success: boolean; commitment?: string; error?: string}>
     logout,
-    clearError
+    clearError,
+    getCurrentCommitment,     // Added missing method
+    getUserProfile           // Added missing method
   };
 
   return (

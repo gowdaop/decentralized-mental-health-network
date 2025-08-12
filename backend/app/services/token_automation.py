@@ -1,16 +1,41 @@
-from app.services.blockchain_service import BlockchainService
-from app.ai.services.mood_analyzer import MoodAnalyzer
-from app.ai.services.crisis_detector import CrisisDetector
+# backend/app/services/token_automation.py
+from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
-from typing import Dict, Optional
+from app.models.user import User, MoodEntry
+from typing import Dict, Optional, List
 import logging
+
+try:
+    from app.services.blockchain_service import BlockchainService
+    from app.ai.services.mood_analyzer import MoodAnalyzer
+    from app.ai.services.crisis_detector import CrisisDetector
+    BLOCKCHAIN_ENABLED = True
+except ImportError as e:
+    print(f"⚠️ Blockchain/AI services not available: {e}")
+    BLOCKCHAIN_ENABLED = False
+    BlockchainService = None
+    MoodAnalyzer = None
+    CrisisDetector = None
 
 class TokenAutomationService:
     def __init__(self):
-        self.blockchain_service = BlockchainService()
-        self.mood_analyzer = MoodAnalyzer()
-        self.crisis_detector = CrisisDetector()
         self.logger = logging.getLogger(__name__)
+        
+        # Initialize services if available
+        if BLOCKCHAIN_ENABLED:
+            try:
+                self.blockchain_service = BlockchainService()
+                self.mood_analyzer = MoodAnalyzer()
+                self.crisis_detector = CrisisDetector()
+            except Exception as e:
+                self.logger.warning(f"Failed to initialize blockchain services: {e}")
+                self.blockchain_service = None
+                self.mood_analyzer = None
+                self.crisis_detector = None
+        else:
+            self.blockchain_service = None
+            self.mood_analyzer = None
+            self.crisis_detector = None
         
         # Token reward amounts
         self.rewards = {
@@ -22,25 +47,25 @@ class TokenAutomationService:
             'community_contribution': 30
         }
     
-    def process_mood_entry_reward(self, user_commitment: str, user_address: str, db: Session) -> Optional[str]:
-        """Reward user for consistent mood tracking"""
+    def process_mood_entry_reward(self, user_commitment: str, user_address: Optional[str], db: Session) -> Optional[str]:
+        """Reward user for mood tracking entry"""
         try:
-            # Analyze user's mood tracking consistency
-            analysis = self.mood_analyzer.analyze_user_trends(user_commitment, db, days=7)
-            
+            # Basic mood entry reward
             base_reward = self.rewards['mood_entry']
             
-            # Bonus for consistency
-            if analysis['progress']['engagement_score'] > 0.8:
+            # Check for consistency bonus
+            if self._check_consistency_bonus(user_commitment, db):
                 base_reward += self.rewards['consistent_logging']
                 self.logger.info(f"Consistency bonus awarded to {user_commitment[:8]}...")
             
-            # Reward user with tokens
-            tx_hash = self.blockchain_service.reward_user(user_address, base_reward)
-            
-            if tx_hash:
-                self.logger.info(f"Mood entry reward: {base_reward} tokens to {user_commitment[:8]}...")
-                return tx_hash
+            # Reward user with tokens (if blockchain is available)
+            if self.blockchain_service and user_address:
+                tx_hash = self.blockchain_service.reward_user(user_address, base_reward)
+                if tx_hash:
+                    self.logger.info(f"Mood entry reward: {base_reward} tokens to {user_commitment[:8]}...")
+                    return tx_hash
+            else:
+                self.logger.info(f"Mood entry logged for {user_commitment[:8]}... (blockchain not available)")
             
             return None
             
@@ -59,11 +84,11 @@ class TokenAutomationService:
             elif support_quality == 'crisis_intervention':
                 reward_amount = self.rewards['crisis_support']
             
-            tx_hash = self.blockchain_service.reward_user(user_address, reward_amount)
-            
-            if tx_hash:
-                self.logger.info(f"Peer support reward: {reward_amount} tokens to {user_commitment[:8]}...")
-                return tx_hash
+            if self.blockchain_service:
+                tx_hash = self.blockchain_service.reward_user(user_address, reward_amount)
+                if tx_hash:
+                    self.logger.info(f"Peer support reward: {reward_amount} tokens to {user_commitment[:8]}...")
+                    return tx_hash
             
             return None
             
@@ -71,113 +96,108 @@ class TokenAutomationService:
             self.logger.error(f"Error processing peer support reward: {e}")
             return None
     
-    def process_session_creation_reward(self, user_commitment: str, user_address: str, session_impact: Dict) -> Optional[str]:
-        """Reward user for creating valuable peer sessions"""
+    def process_crisis_intervention_reward(self, user_commitment: str, user_address: Optional[str], intervention_data: Dict) -> Optional[str]:
+        """Reward users who successfully handle crisis situations"""
         try:
-            base_reward = self.rewards['session_creation']
+            reward_amount = self.rewards['crisis_support']
             
-            # Bonus for high participation sessions
-            participants = session_impact.get('participant_count', 1)
-            if participants >= 3:
-                base_reward += 10  # Bonus for successful group formation
+            # Bonus for helping others in crisis
+            if intervention_data.get('helped_others', False):
+                reward_amount += 25
             
-            tx_hash = self.blockchain_service.reward_user(user_address, base_reward)
-            
-            if tx_hash:
-                self.logger.info(f"Session creation reward: {base_reward} tokens to {user_commitment[:8]}...")
-                return tx_hash
+            if self.blockchain_service and user_address:
+                tx_hash = self.blockchain_service.reward_user(user_address, reward_amount)
+                if tx_hash:
+                    self.logger.info(f"Crisis intervention reward: {reward_amount} tokens to {user_commitment[:8]}...")
+                    return tx_hash
             
             return None
             
         except Exception as e:
-            self.logger.error(f"Error processing session creation reward: {e}")
+            self.logger.error(f"Error processing crisis intervention reward: {e}")
             return None
     
-    def process_community_contribution_reward(self, user_commitment: str, user_address: str, contribution_type: str) -> Optional[str]:
-        """Reward users for various community contributions"""
+    def _check_consistency_bonus(self, user_commitment: str, db: Session) -> bool:
+        """Check if user qualifies for consistency bonus"""
         try:
-            reward_amount = self.rewards['community_contribution']
+            # Check if user has logged mood in last 7 days consistently
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=7)
+            entries = db.query(MoodEntry).filter(
+                MoodEntry.user_commitment == user_commitment,
+                MoodEntry.timestamp >= cutoff_date
+            ).all()
             
-            # Adjust based on contribution type
-            if contribution_type == 'crisis_intervention':
-                reward_amount = self.rewards['crisis_support']
-            elif contribution_type == 'mentorship':
-                reward_amount = int(reward_amount * 1.2)
-            
-            tx_hash = self.blockchain_service.reward_user(user_address, reward_amount)
-            
-            if tx_hash:
-                self.logger.info(f"Community contribution reward: {reward_amount} tokens to {user_commitment[:8]}...")
-                return tx_hash
-            
-            return None
+            # User gets bonus if they have entries on at least 5 of last 7 days
+            days_with_entries = len(set(entry.timestamp.date() for entry in entries))
+            return days_with_entries >= 5
             
         except Exception as e:
-            self.logger.error(f"Error processing community contribution reward: {e}")
-            return None
+            self.logger.error(f"Error checking consistency bonus: {e}")
+            return False
     
-    def calculate_reputation_adjustment(self, user_commitment: str, db: Session) -> Dict:
-        """Calculate reputation adjustments based on AI analysis"""
+    def update_user_reputation(self, user_commitment: str, db: Session) -> Dict:
+        """Update user reputation based on recent activity"""
         try:
-            # Analyze user behavior patterns
-            analysis = self.mood_analyzer.analyze_user_trends(user_commitment, db)
+            user = db.query(User).filter(User.commitment == user_commitment).first()
+            if not user:
+                return {'error': 'User not found'}
             
-            reputation_change = 0
-            reasons = []
+            # Calculate reputation adjustment
+            reputation_change = self._calculate_reputation_adjustment(user_commitment, db)
             
-            # Positive adjustments
-            if analysis['trend']['direction'] == 'improving':
-                reputation_change += 5
-                reasons.append("Positive mood trend")
+            # Update user reputation
+            old_reputation = user.reputation_score
+            new_reputation = max(0, min(100, old_reputation + reputation_change))
+            user.reputation_score = new_reputation
+            db.commit()
             
-            if analysis['progress']['consistency_score'] > 0.8:
-                reputation_change += 3
-                reasons.append("Consistent engagement")
-            
-            if analysis['progress']['engagement_score'] > 0.9:
-                reputation_change += 2
-                reasons.append("High platform engagement")
-            
-            # Negative adjustments (minimal, focused on platform abuse)
-            if analysis['risk']['level'] == 'HIGH' and analysis['risk']['crisis_rate'] > 0.5:
-                # Note: This is for platform stability, not penalizing mental health struggles
-                reputation_change -= 1
-                reasons.append("May need additional support")
+            self.logger.info(f"Reputation updated for {user_commitment[:8]}...: {old_reputation} → {new_reputation}")
             
             return {
-                'reputation_change': reputation_change,
-                'reasons': reasons,
-                'current_analysis': analysis
+                'user_commitment': user_commitment,
+                'old_reputation': old_reputation,
+                'new_reputation': new_reputation,
+                'change': reputation_change
             }
+            
+        except Exception as e:
+            self.logger.error(f"Error updating user reputation: {e}")
+            return {'error': str(e)}
+    
+    def _calculate_reputation_adjustment(self, user_commitment: str, db: Session) -> float:
+        """Calculate reputation adjustment based on recent activity"""
+        try:
+            adjustment = 0.0
+            
+            # Check recent mood entries (last 7 days)
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=7)
+            recent_entries = db.query(MoodEntry).filter(
+                MoodEntry.user_commitment == user_commitment,
+                MoodEntry.timestamp >= cutoff_date
+            ).all()
+            
+            # Positive adjustments
+            if len(recent_entries) >= 5:  # Consistent logging
+                adjustment += 2.0
+            
+            if len(recent_entries) > 0:
+                avg_mood = sum(entry.mood_score for entry in recent_entries) / len(recent_entries)
+                if avg_mood > 7:  # Good mood trend
+                    adjustment += 1.0
+            
+            # Check for crisis recovery
+            crisis_entries = [e for e in recent_entries if e.crisis_flag]
+            if len(crisis_entries) == 0 and len(recent_entries) > 0:
+                adjustment += 1.0  # No crisis episodes
+            
+            return min(5.0, adjustment)  # Cap at +5 points per update
             
         except Exception as e:
             self.logger.error(f"Error calculating reputation adjustment: {e}")
-            return {'reputation_change': 0, 'reasons': [], 'error': str(e)}
-    
-    def process_automated_rewards(self, db: Session) -> Dict:
-        """Process automated rewards for all eligible users"""
-        try:
-            results = {
-                'processed': 0,
-                'successful': 0,
-                'failed': 0,
-                'total_tokens_distributed': 0
-            }
-            
-            # This would be called periodically (e.g., daily cron job)
-            # For now, we'll implement a basic version
-            
-            self.logger.info("Starting automated reward processing...")
-            
-            # In a production system, this would:
-            # 1. Query users eligible for rewards
-            # 2. Calculate reward amounts based on AI analysis
-            # 3. Execute blockchain transactions
-            # 4. Update reputation scores
-            # 5. Log all activities for transparency
-            
-            return results
-            
-        except Exception as e:
-            self.logger.error(f"Error in automated reward processing: {e}")
-            return {'error': str(e)}
+            return 0.0
+
+
+# Legacy class alias for backward compatibility
+class AdvancedReputationService(TokenAutomationService):
+    """Alias for TokenAutomationService to maintain backward compatibility"""
+    pass
