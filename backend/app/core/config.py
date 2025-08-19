@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     
     # Database
-    DATABASE_URL: str = "sqlite:///./mental_health.db"
+    DATABASE_URL: str = "postgresql://gowdaop:9481911456Vig@host.docker.internal:5432/mydatabase"
     
     # Blockchain Configuration - Updated field names to match your usage
     WEB3_PROVIDER_URL: str = "http://127.0.0.1:8545"  # Changed from GANACHE_URL to match your code
